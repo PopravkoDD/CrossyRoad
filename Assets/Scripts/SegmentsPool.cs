@@ -41,8 +41,8 @@ public class SegmentsPool : Singleton<SegmentsPool>
             }
         }
 
-        var nice = AddAndReturnNewObstacle(obstacleType);
-        return nice;
+        var newObstacle = AddAndReturnNewObstacle(obstacleType);
+        return newObstacle;
     }
 
     public WorldSegmentGenerationStrategy GetAvailableSegment(SegmentType segmentType)
@@ -57,9 +57,9 @@ public class SegmentsPool : Singleton<SegmentsPool>
             }
         }
 
-        var nice = AddAndReturnNewSegment(segmentType);
-        _activeSegments.Add(nice);
-        return nice;
+        var newSegment = AddAndReturnNewSegment(segmentType);
+        _activeSegments.Add(newSegment);
+        return newSegment;
     }
 
     private WorldSegmentGenerationStrategy AddAndReturnNewSegment(SegmentType segmentType)

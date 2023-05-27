@@ -1,9 +1,15 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using TouchPhase = UnityEngine.TouchPhase;
 
 public class CharacterMovement : MonoBehaviour
 {
+    public event Action deathEvent;
+    public event Action onStepBack;
+    public event Action onStepForward;
+
     [SerializeField] private WorldSegmentData _worldSegmentData;
     [SerializeField] private AnimationCurve _verticalJumpAnimation;
     [SerializeField] private AnimationCurve _horizontalJumpAnimation;
@@ -11,42 +17,68 @@ public class CharacterMovement : MonoBehaviour
     [SerializeField] private LayerMask _groundSegmentLayer;
     [SerializeField] private LayerMask _movingPlatformLayer;
     [SerializeField] private LayerMask _deathLayer;
+        
     
     private float _stepDistance;
     private bool _isInJump;
     [SerializeField] private int _horizontalJumpCounter;
-    private int _maxHorizontalJumpCounter;
     private bool _isOnMovingPlatform;
+
+    private Vector2 _startTouchPosition;
+    private Vector2 _endTouchPosition;
 
     private void Start()
     {
+        _horizontalJumpCounter = _worldSegmentData.GetCenterOfSegmentCount();
         _previousSegmentLayer = _groundSegmentLayer;
         _stepDistance = _worldSegmentData.StepSize;
-        _maxHorizontalJumpCounter = Convert.ToInt32(_worldSegmentData.MaxStepsCount);
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.W) && !_isInJump)
+        if(Input.touchCount > 0)
         {
-            StartCoroutine(Jump(transform.position + Vector3.forward * _stepDistance));
-        }
-        
-        if (Input.GetKeyDown(KeyCode.S) && !_isInJump)
-        {
-            StartCoroutine(Jump(transform.position + Vector3.back * _stepDistance));
-        }
-        
-        if (Input.GetKeyDown(KeyCode.D) && !_isInJump && _horizontalJumpCounter < _maxHorizontalJumpCounter)
-        {
-            _horizontalJumpCounter++;
-            StartCoroutine(Jump(transform.position + Vector3.right * _stepDistance));
-        }
-        
-        if (Input.GetKeyDown(KeyCode.A) && !_isInJump && _horizontalJumpCounter > -_maxHorizontalJumpCounter)
-        {
-            _horizontalJumpCounter--;
-            StartCoroutine(Jump(transform.position + Vector3.left * _stepDistance));
+            var touch = Input.GetTouch(0);
+
+            switch (touch.phase)
+            {
+                case TouchPhase.Began:
+                    _startTouchPosition = touch.position;
+                    break;
+                case TouchPhase.Ended:
+                {
+                    var swipeVector = (touch.position - _startTouchPosition).normalized;
+
+                    if (swipeVector.x >= 0.71 && !_isInJump && _horizontalJumpCounter != _worldSegmentData.XMoveCoordinates.Count)
+                    {
+                        _horizontalJumpCounter++;
+                        StartCoroutine(Jump(transform.position + Vector3.right * _stepDistance));
+                        break;
+                    }
+
+                    if (swipeVector.y >= 0.71 && !_isInJump)
+                    {
+                        StartCoroutine(Jump(transform.position + Vector3.forward * _stepDistance));
+                        onStepForward?.Invoke();
+                        break;
+                    }
+
+                    if (swipeVector.x <= -0.71 && !_isInJump && _horizontalJumpCounter != 1)
+                    {
+                        _horizontalJumpCounter--;
+                        StartCoroutine(Jump(transform.position + Vector3.left * _stepDistance));
+                        break;
+                    }
+
+                    if (swipeVector.y <= -0.71 && !_isInJump)
+                    {
+                        StartCoroutine(Jump(transform.position + Vector3.back * _stepDistance));
+                        onStepBack?.Invoke();
+                    }
+                    
+                    break;
+                }
+            }
         }
     }
 
@@ -82,7 +114,10 @@ public class CharacterMovement : MonoBehaviour
                 transform.parent.DetachChildren();
                 _previousSegmentLayer = layer;
 
-                transform.position = new Vector3(_worldSegmentData.GetNearestCoordinate(endPosition.x), startPosition.y, endPosition.z);
+                var nearestCoordinateCount = _worldSegmentData.GetNearestCoordinate(endPosition.x);
+                Debug.Log(nearestCoordinateCount);
+                _horizontalJumpCounter = nearestCoordinateCount + 1;
+                transform.position = new Vector3(_worldSegmentData.XMoveCoordinates[nearestCoordinateCount], startPosition.y, endPosition.z);
                 yield return null;
             }
              
@@ -91,9 +126,9 @@ public class CharacterMovement : MonoBehaviour
         
         if (_deathLayer.ExistLayerByLayerMask(layer))
         {
-            Debug.Log("Death");
             _isInJump = false;
-            //Destroy(gameObject);
+            deathEvent?.Invoke();
+            Destroy(gameObject);
             yield return null;
         }
         
@@ -109,14 +144,10 @@ public class CharacterMovement : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        /*Debug.Log(gameObject.name);
-        Debug.Log(other.gameObject.name);
-        Debug.Log(_deathLayer.value);
-        Debug.Log(other.gameObject.layer);*/
-        Debug.LogWarning("character");
-        if (_deathLayer.ExistLayerByLayerMask(other.gameObject.layer));
+        if (_deathLayer.ExistLayerByLayerMask(other.gameObject.layer))
         {
-            Debug.Log("Nice");
+            deathEvent?.Invoke();
+            Destroy(gameObject);
         }
     }
 }
@@ -125,10 +156,6 @@ public static class LayerMaskExtension
 {
     public static bool ExistLayerByLayerMask(this LayerMask layerMask, int layer)
     {
-        /*Debug.LogError(layerMask.value);
-        Debug.LogError(layer);*/
-        Debug.LogWarning((layerMask.value & (1 << layer)));
-        
         if ((layerMask.value & (1 << layer)) != 0)
         {
             return true;
